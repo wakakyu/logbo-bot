@@ -153,11 +153,55 @@ function getFullAcct(user) {
   return `${user.username}@${host}`;
 }
 
+// ヘルパー: ノート処理の本体（ロックチェック通過後に呼ばれる）
+async function processNote(note, channelName) {
+    const userId = note.userId;
+    const text = note.text || '';
+    const acct = getFullAcct(note.user);
+    
+    console.log(`[${channelName}] Processing note from @${acct}: ${text}`);
+
+    // Follow Me
+    if (text.includes('follow me') || text.includes('フォローして')) {
+      // ▼▼▼ 追加: 既にフォロー済みかチェック ▼▼▼
+      const isAlreadyFollowing = await isFollower(userId);
+      if (isAlreadyFollowing) {
+        console.log(`[${channelName}] Already following @${acct}. Skipping follow action.`);
+        return; // 既にフォロー済みなら何もしないで終了
+      }
+      // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+      console.log(`[${channelName}] Follow me detected`);
+      await followUser(userId);
+      await cli.request('notes/create', {
+        text: `@${acct} フォローいたしました。「ログボ」と呟いてログインボーナスをお受け取りください。`,
+        replyId: note.id,
+        visibility: note.visibility === 'specified' ? 'specified' : 'public'
+      });
+      return;
+    }
+
+    // ランキング
+    if (text.includes('ランキング')) {
+      const rankingText = getRanking();
+      await cli.request('notes/create', {
+        text: `@${acct}\n${rankingText}`,
+        replyId: note.id,
+        visibility: note.visibility === 'specified' ? 'specified' : 'public'
+      });
+      return;
+    }
+
+    // ログボ
+    if (text.includes('ログボ')) {
+      await processLogboWithAcct(note, userId, acct);
+      return;
+    }
+}
+
+
 async function processNote(note, channelName) {
   const userId = note.userId;
-  const text = note.text || '';
-  const acct = getFullAcct(note.user);
-  
   console.log(`[${channelName}] Processing note from @${acct}: ${text}`);
 
   if (text.includes('follow me') || text.includes('フォローして')) {
@@ -171,7 +215,6 @@ async function processNote(note, channelName) {
     return;
   }
 
-  if (text.includes('ランキング')) {
     const rankingText = getRanking();
     await cli.request('notes/create', {
       text: `@${acct}\n${rankingText}`,
@@ -186,43 +229,6 @@ async function processNote(note, channelName) {
     await processLogboWithAcct(note, userId, acct);
     console.log(`[${channelName}] Logbo reply sent`);
     return;
-  }
-}
-
-async function processLogboWithAcct(note, userId, acct) {
-  try {
-    const isFollowerUser = await isFollower(userId);
-    if (! isFollowerUser) {
-      await cli.request('notes/create', {
-        text: `@${acct} ログインボーナスを受け取るには、私をフォローしてください。「follow me」と送っていただければフォローいたします。`,
-        replyId: note.id,
-        visibility: note.visibility === 'specified' ? 'specified' :  'public'
-      });
-      return;
-    }
-
-    const result = recordLogbo(userId, acct);
-    
-    try {
-      const reactionEmoji = result.alreadyDone ? '❌' : '⭕';
-      await cli.request('notes/reactions/create', { noteId: note.id, reaction: reactionEmoji });
-    } catch (e) {
-      // Ignore duplicate reaction error
-    }
-
-    const replyVisibility = note.visibility === 'specified' ?  'specified' : 'public';
-    let message = '';
-    if (result.alreadyDone) {
-      message = `@${acct} 本日は既にログインボーナスを受取済みです。\n連続:  ${result.consecutive}日 / 合計: ${result.total}日`;
-    } else {
-      message = result.consecutive === 1 && result.total === 1
-        ? `@${acct} 🎉 初回ログインボーナスです！明日もまたお越しください。`
-        : `@${acct} 🎁 ログインボーナス！\n連続ログイン: ${result.consecutive}日目\n合計:  ${result.total}日`;
-    }
-
-    await cli.request('notes/create', { text: message, replyId:  note.id, visibility: replyVisibility });
-  } catch (err) {
-    console.error(`Error processing logbo for ${acct}:`, err);
   }
 }
 
