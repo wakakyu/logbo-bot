@@ -182,8 +182,12 @@ async function processNote(note, channelName) {
       return;
     }
 
+
+    // ランキング正規表現
+    const rankingPattern = /ランキング|らんきんぐ|ranking/i;
     // ランキング
-    if (text.includes('ランキング')) {
+    //if (text.includes('ランキング')) {
+    if (rankingPattern.text(text)) {
       const rankingText = getRanking();
       await cli.request('notes/create', {
         text: `@${acct}\n${rankingText}`,
@@ -193,8 +197,11 @@ async function processNote(note, channelName) {
       return;
     }
 
+    // ログボ正規表現
+    const logboPattern = /ログボ|ろぐぼ|ログインボーナス|ろぐいんぼーなす|loginbonus/i;
     // ログボ
-    if (text.includes('ログボ')) {
+    // if (text.includes('ログボ')) {
+    if (logboPattern.test(text)) {
       // ★ここで processLogboWithAcct を呼んでいるので、この関数が存在しないとエラーになる
       await processLogboWithAcct(note, userId, acct);
       return;
