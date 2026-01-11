@@ -187,7 +187,7 @@ async function processNote(note, channelName) {
     const rankingPattern = /ランキング|らんきんぐ|ranking/i;
     // ランキング
     //if (text.includes('ランキング')) {
-    if (rankingPattern.text(text)) {
+    if (rankingPattern.test(text)) {
       const rankingText = getRanking();
       await cli.request('notes/create', {
         text: `@${acct}\n${rankingText}`,
@@ -198,7 +198,7 @@ async function processNote(note, channelName) {
     }
 
     // ログボ正規表現
-    const logboPattern = /ログボ|ろぐぼ|ログインボーナス|ろぐいんぼーなす|loginbonus/i;
+    const logboPattern = /ログボ|ろぐぼ|ログインボーナス|ろぐいんぼーなす/;
     // ログボ
     // if (text.includes('ログボ')) {
     if (logboPattern.test(text)) {
