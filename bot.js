@@ -161,6 +161,12 @@ async function processNote(note, channelName) {
     const text = note.text || '';
     const acct = getFullAcct(note.user);
     
+    // stationstaff無視
+    if (note.user.username === 'stationstaff') {
+        console.log(`[${channelName}] Ignoring note from @${acct} (stationstaff).`);
+        return; // ここで強制終了：これ以降の処理は一切しない
+    }
+
     console.log(`[${channelName}] Processing note from @${acct}: ${text}`);
 
     // Follow Me
