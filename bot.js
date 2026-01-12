@@ -274,7 +274,7 @@ async function processLogboWithAcct(note, userId, acct) {
         return; // ここで終了・認証には進まない
     }
 
-    // 自動化対策（ver 1.0）
+    // 自動化対策（ver 2.0）
     if (pendingAuth.has(userId)) {
         const requiredCode = pendingAuth.get(userId);
         if (note.text && note.text.includes(requiredCode)) {
@@ -291,8 +291,8 @@ async function processLogboWithAcct(note, userId, acct) {
             return;
         }
     } 
-    // B. 新規かつ未実施: 50%で認証
-    else if (Math.random() < 0.5) {
+    // B. 新規かつ未実施: 00秒判定，認証コード送る
+    else if (new Date(note.createdAt).getSeconds() === 0) {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         pendingAuth.set(userId, code);
 
