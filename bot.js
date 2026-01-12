@@ -214,7 +214,34 @@ async function processNote(note, channelName) {
     }
 }
 
-// 
+// 認証待ちのユーザーIDと正解コードを保存するリスト
+const pendingAuth = new Map();
+
+// ログボ済みかどうか（読み取り専用）
+function checkLogboStatus(userId) {
+  const today = getLogboDate();
+  const record = db.prepare('SELECT * FROM logbo_records WHERE user_id = ?').get(userId);
+
+  if (!record) {
+    return { alreadyDone: false, total: 0, consecutive: 0 };
+  }
+
+  if (record.last_logbo_date === today) {
+    return { 
+      alreadyDone: true, 
+      total: record.total_days, 
+      consecutive: record.consecutive_days 
+    };
+  }
+
+  return { 
+    alreadyDone: false, 
+    total: record.total_days, 
+    consecutive: record.consecutive_days 
+  };
+}
+
+// メイン処理
 async function processLogboWithAcct(note, userId, acct) {
   try {
     const isFollowerUser = await isFollower(userId);
@@ -227,10 +254,63 @@ async function processLogboWithAcct(note, userId, acct) {
       return;
     }
 
+    const status = checkLogboStatus(userId);
+
+    if (status.alreadyDone) {
+        try {
+            await cli.request('notes/reactions/create', { 
+                noteId: note.id, 
+                reaction: ':ablobcatblinkhyper:' 
+            });
+        } catch (e) {
+            // 無視
+        }
+
+        await cli.request('notes/create', {
+            text: `@${acct} 本日は既にログインボーナスを**受取済み**です...\n$[sparkle **連続: ${status.consecutive}日**] / **合計: ${status.total}日**`,
+            replyId: note.id,
+            visibility: 'public'
+        });
+        return; // ここで終了・認証には進まない
+    }
+
+    // 自動化対策（ver 1.0）
+    if (pendingAuth.has(userId)) {
+        const requiredCode = pendingAuth.get(userId);
+        if (note.text && note.text.includes(requiredCode)) {
+            // 正解
+            pendingAuth.delete(userId);
+            await cli.request('notes/reactions/create', { noteId: note.id, reaction: '✅' });
+        } else {
+            // 不正解
+            await cli.request('notes/create', {
+                text: `@${acct} 認証コードが確認できませんでした...\n返信に「${requiredCode}」を含めてください。`,
+                replyId: note.id,
+                visibility: 'public'
+            });
+            return;
+        }
+    } 
+    // B. 新規かつ未実施: 50%で認証
+    else if (Math.random() < 0.5) {
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        pendingAuth.set(userId, code);
+
+        await cli.request('notes/create', {
+            text: `@${acct} 【自動化対策】\n$[fg.color=ff0000 ログボを受け取るには認証が必要です。]\n返信で「${code}」と送ってください。`,
+            replyId: note.id,
+            visibility: 'public'
+        });
+        console.log(`>>> Auth challenge sent to ${acct} (Code: ${code})`);
+        return; // 書き込まずに終了
+    }
+    // 自動化クリア
+
+    // ここで記録
     const result = recordLogbo(userId, acct);
     
     try {
-        const reactionEmoji = result.alreadyDone ? '❌' : '⭕';
+        const reactionEmoji = result.alreadyDone ? ':ablobcatblinkhyper:' : ':blobcat_fun_c30:';
         await cli.request('notes/reactions/create', { noteId: note.id, reaction: reactionEmoji });
     } catch (e) {
         // リアクション重複エラーは無視
@@ -238,12 +318,15 @@ async function processLogboWithAcct(note, userId, acct) {
 
     const replyVisibility = note.visibility === 'specified' ? 'specified' : 'public';
     let message = '';
+    
+    // ここは recordLogbo の戻り値を使う（さっき書き込んだ最新の結果）
     if (result.alreadyDone) {
-      message = `@${acct} 本日は既にログインボーナスを受取済みです。\n連続: ${result.consecutive}日 / 合計: ${result.total}日`;
+      // ※ ここに来ることは理論上少ないが、タイミング次第でありえるので残す
+      message = `@${acct} 本日は既にログインボーナスを受取済みです...\n$[sparkle **連続: ${result.consecutive}日**] / **合計: ${result.total}日**`;
     } else {
       message = result.consecutive === 1 && result.total === 1
-        ? `@${acct} 🎉 初回ログインボーナスです！明日もまたお越しください。`
-        : `@${acct} 🎁 ログインボーナス！\n連続ログイン: ${result.consecutive}日目\n合計: ${result.total}日`;
+        ? `@${acct} $[sparkle **初回**ログインボーナスです！] 明日もまたログインしてください。`
+        : `@${acct} **ログインボーナス！**\n$[sparkle 連続ログイン: ${result.consecutive}日目]\n合計: ${result.total}日`;
     }
 
     await cli.request('notes/create', { text: message, replyId: note.id, visibility: replyVisibility });
