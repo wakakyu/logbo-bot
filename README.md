@@ -1,5 +1,5 @@
 # 私を読んで
-Misskey Login Bonus Bot
+Misskey Login Bonus Bot for msky.haibala.com
 
 ## サンプル
 `msky.haibala.com` で動作している子
